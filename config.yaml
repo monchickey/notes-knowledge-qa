@@ -1,0 +1,51 @@
+# 笔记知识检索问答系统配置
+
+# 笔记目录路径（支持绝对路径或相对于本配置文件的路径）
+notes_dir: ./notes
+
+# 向量嵌入配置
+embedding:
+  # sentence-transformers 模型名称
+  model: BAAI/bge-small-zh-v1.5
+  # 编码时的 batch_size
+  batch_size: 32
+
+# 文本分块配置
+chunking:
+  # 每个块的最大字符数
+  chunk_size: 500
+  # 块之间的重叠字符数
+  chunk_overlap: 50
+
+# 全文检索配置
+keyword_index:
+  # BM25 参数
+  k1: 1.5
+  b: 0.75
+
+# 混合检索配置
+retriever:
+  # 向量检索返回的候选数量
+  vector_top_k: 10
+  # 关键词检索返回的候选数量
+  keyword_top_k: 10
+  # 最终返回的结果数量
+  final_top_k: 5
+  # 向量检索权重（0-1），关键词检索权重为 1 - vector_weight
+  vector_weight: 0.6
+
+# LLM 问答配置（兼容 OpenAI 格式的 API）
+llm:
+  # API 地址
+  api_base: https://api.deepseek.com/v1
+  # API 密钥（建议通过环境变量 LLM_API_KEY 设置）
+  api_key: ""
+  # 模型名称
+  model: deepseek-chat
+  # 温度参数
+  temperature: 0.3
+  # 最大 token 数
+  max_tokens: 2048
+
+# 索引数据存储目录
+index_dir: ./index_data

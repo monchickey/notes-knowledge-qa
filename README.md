@@ -22,8 +22,10 @@
 ## 快速开始
 
 ```bash
-# 安装依赖
-pip install -e .
+# 创建虚拟环境并安装依赖
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
 
 # 编辑配置
 cp config.yaml config.local.yaml
@@ -38,6 +40,15 @@ qa query "什么是 RAG？"
 # 交互式对话
 qa chat
 ```
+
+## CLI 命令
+
+| 命令 | 说明 |
+|------|------|
+| `qa index` | 扫描笔记目录，构建向量索引和全文索引 |
+| `qa query "问题"` | 单次问答 |
+| `qa chat` | 交互式对话模式 |
+| `qa config-show` | 查看当前配置 |
 
 ## 项目结构
 
@@ -61,13 +72,13 @@ notes-knowledge-qa/
 
 ## 开发进度
 
-- [ ] Phase 1: 项目基础结构（配置、依赖）
-- [ ] Phase 2: 笔记加载与分块
-- [ ] Phase 3: 向量嵌入与存储
-- [ ] Phase 4: 全文检索
-- [ ] Phase 5: 混合检索与问答生成
-- [ ] Phase 6: CLI 交互
-- [ ] Phase 7: 测试与优化
+- [x] Phase 1: 项目基础结构（配置、依赖）
+- [x] Phase 2: 笔记加载与分块
+- [x] Phase 3: 向量嵌入与存储
+- [x] Phase 4: 全文检索
+- [x] Phase 5: 混合检索与问答生成
+- [x] Phase 6: CLI 交互
+- [x] Phase 7: 测试与优化
 
 ## License
 

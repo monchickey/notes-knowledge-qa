@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "notes-qa"
+version = "0.1.0"
+description = "基于 AI 的个人笔记知识检索问答系统"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.0.0",
+    "numpy>=1.24.0",
+    "jieba>=0.42.1",
+    "pyyaml>=6.0",
+    "rich>=13.0.0",
+    "click>=8.0.0",
+    "sentence-transformers>=2.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+qa = "notes_qa.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["notes_qa*"]
