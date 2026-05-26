@@ -5,20 +5,18 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from notes_qa.chunker import chunk_documents
 from notes_qa.config import load_config
-from notes_qa.embedder import Embedder
-from notes_qa.keyword_index import KeywordIndex
 from notes_qa.loader import load_documents
-from notes_qa.qa import QAEngine
-from notes_qa.retriever import Retriever
-from notes_qa.vector_store import VectorStore
 
 console = Console()
 
 
-def _build_components(cfg: dict):
-    """构建所有组件实例。"""
+def _build_index_components(cfg: dict):
+    """构建索引相关组件（不涉及 LLM）。"""
+    from notes_qa.embedder import Embedder
+    from notes_qa.keyword_index import KeywordIndex
+    from notes_qa.vector_store import VectorStore
+
     embedder = Embedder(
         model_name=cfg["embedding"]["model"],
         batch_size=cfg["embedding"]["batch_size"],
@@ -29,6 +27,15 @@ def _build_components(cfg: dict):
         k1=cfg["keyword_index"]["k1"],
         b=cfg["keyword_index"]["b"],
     )
+    return embedder, vector_store, keyword_index
+
+
+def _build_qa_components(cfg: dict):
+    """构建完整问答组件（含 LLM）。"""
+    from notes_qa.qa import QAEngine
+    from notes_qa.retriever import Retriever
+
+    embedder, vector_store, keyword_index = _build_index_components(cfg)
     retriever = Retriever(
         embedder=embedder,
         vector_store=vector_store,
@@ -74,6 +81,7 @@ def index(ctx):
             return
 
         # 分块
+        from notes_qa.chunker import chunk_documents
         task = progress.add_task("文本分块...", total=None)
         chunks = chunk_documents(
             documents,
@@ -85,7 +93,7 @@ def index(ctx):
 
         # 构建向量索引
         task = progress.add_task("构建向量索引（首次加载模型可能较慢）...", total=None)
-        embedder, vector_store, keyword_index, _, _ = _build_components(cfg)
+        embedder, vector_store, keyword_index = _build_index_components(cfg)
         embeddings = embedder.encode([c.content for c in chunks])
         vector_store.clear()
         vector_store.add(chunks, embeddings)
@@ -110,7 +118,7 @@ def index(ctx):
 def query(ctx, question):
     """单次问答。"""
     cfg = ctx.obj["config"]
-    embedder, vector_store, keyword_index, _, qa_engine = _build_components(cfg)
+    _, vector_store, keyword_index, _, qa_engine = _build_qa_components(cfg)
 
     # 加载已有索引
     if not vector_store.load():
@@ -151,7 +159,7 @@ def query(ctx, question):
 def chat(ctx):
     """交互式对话模式。"""
     cfg = ctx.obj["config"]
-    embedder, vector_store, keyword_index, _, qa_engine = _build_components(cfg)
+    _, vector_store, keyword_index, _, qa_engine = _build_qa_components(cfg)
 
     # 加载已有索引
     if not vector_store.load():
@@ -191,6 +199,52 @@ def chat(ctx):
             console.print(cap.get())
 
     keyword_index.close()
+
+
+@main.command()
+@click.argument("question")
+@click.option("--top-k", "-k", default=None, type=int, help="返回结果数量")
+@click.pass_context
+def search(ctx, question, top_k):
+    """仅检索，不调用大模型，返回原始 TopK 结果。"""
+    from notes_qa.retriever import Retriever
+
+    cfg = ctx.obj["config"]
+    embedder, vector_store, keyword_index = _build_index_components(cfg)
+
+    if not vector_store.load():
+        console.print("[red]向量索引不存在，请先运行 `qa index` 构建索引。[/red]")
+        return
+
+    retriever = Retriever(
+        embedder=embedder,
+        vector_store=vector_store,
+        keyword_index=keyword_index,
+        vector_top_k=cfg["retriever"]["vector_top_k"],
+        keyword_top_k=cfg["retriever"]["keyword_top_k"],
+        final_top_k=top_k or cfg["retriever"]["final_top_k"],
+        vector_weight=cfg["retriever"]["vector_weight"],
+    )
+
+    with console.status("检索中..."):
+        results = retriever.retrieve(question)
+
+    keyword_index.close()
+
+    if not results:
+        console.print("[yellow]未找到相关结果。[/yellow]")
+        return
+
+    console.print(f"\n[bold]查询：[/bold]{question}")
+    console.print(f"[bold]返回 {len(results)} 条结果：[/bold]\n")
+
+    for i, r in enumerate(results, 1):
+        score = r.get("rrf_score", 0)
+        console.print(Panel(
+            r["content"],
+            title=f"[cyan]#{i} {r['file_path']}[/cyan]  (score: {score:.4f})",
+            title_align="left",
+        ))
 
 
 @main.command()

@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 from openai import OpenAI
 
 from notes_qa.retriever import Retriever
@@ -8,7 +10,10 @@ _SYSTEM_PROMPT = """你是一个笔记知识问答助手。根据用户的问题
 要求：
 1. 基于提供的笔记内容回答，如果笔记中没有相关信息，请如实说明
 2. 回答要简洁清晰
-3. 在回答末尾标注参考来源（文件路径）"""
+3. 在回答末尾标注参考来源（文件路径）
+
+如果被问到“你是谁？”、“你是什么模型”之类的问题，请回答 “我是个人笔记问答助手。”
+"""
 
 
 def _build_context(results: list[dict]) -> str:
@@ -32,7 +37,7 @@ class QAEngine:
             base_url=llm_config.get("api_base", "https://api.deepseek.com/v1"),
         )
 
-    def query(self, question: str, stream: bool = False) -> str | iter:
+    def query(self, question: str, stream: bool = False) -> str | Iterator[str]:
         """根据问题检索并生成回答。"""
         results = self.retriever.retrieve(question)
         context = _build_context(results)
@@ -46,7 +51,7 @@ class QAEngine:
                 {"role": "user", "content": user_message},
             ],
             "temperature": self.llm_config.get("temperature", 0.3),
-            "max_tokens": self.llm_config.get("max_tokens", 2048),
+            "max_completion_tokens": self.llm_config.get("max_tokens", 2048),
             "stream": stream,
         }
 

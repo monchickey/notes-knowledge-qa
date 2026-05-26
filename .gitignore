@@ -9,3 +9,5 @@ index_data/
 *.npy
 config.local.yaml
 .pytest_cache/
+models
+notes

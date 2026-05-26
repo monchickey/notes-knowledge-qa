@@ -6,7 +6,7 @@ notes_dir: ./notes
 # 向量嵌入配置
 embedding:
   # sentence-transformers 模型名称
-  model: BAAI/bge-small-zh-v1.5
+  model: models/bge-small-zh-v1.5
   # 编码时的 batch_size
   batch_size: 32
 
@@ -37,11 +37,11 @@ retriever:
 # LLM 问答配置（兼容 OpenAI 格式的 API）
 llm:
   # API 地址
-  api_base: https://api.deepseek.com/v1
+  api_base: https://api.xiaomimimo.com/v1
   # API 密钥（建议通过环境变量 LLM_API_KEY 设置）
   api_key: ""
   # 模型名称
-  model: deepseek-chat
+  model: mimo-v2.5-pro
   # 温度参数
   temperature: 0.3
   # 最大 token 数
