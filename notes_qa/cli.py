@@ -248,6 +248,29 @@ def search(ctx, question, top_k):
 
 
 @main.command()
+@click.option("--host", default="127.0.0.1", help="监听地址")
+@click.option("--port", "-p", default=8000, type=int, help="监听端口")
+@click.pass_context
+def web(ctx, host, port):
+    """启动 Web 服务，通过浏览器进行问答。"""
+    import uvicorn
+
+    from notes_qa.web import create_app
+
+    config_path = None
+    # 传递配置路径给 web 应用
+    from pathlib import Path
+
+    base = Path(__file__).parent.parent
+    local = base / "config.local.yaml"
+    config_path = str(local if local.exists() else base / "config.yaml")
+
+    app = create_app(config_path)
+    console.print(f"[green]启动 Web 服务: http://{host}:{port}[/green]")
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+@main.command()
 @click.pass_context
 def config_show(ctx):
     """显示当前配置。"""
