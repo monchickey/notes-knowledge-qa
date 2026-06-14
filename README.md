@@ -9,6 +9,7 @@
 - **中文友好**：jieba 分词 + BGE 中文 embedding 模型，原生支持中文笔记
 - **本地嵌入**：向量嵌入使用本地 BGE 模型（sentence-transformers），CPU 即可运行，无需 API 调用
 - **兼容性强**：问答生成支持所有 OpenAI 兼容格式的 API（DeepSeek、通义千问等）
+- **Web 界面**：内置 FastAPI Web 服务，支持浏览器端对话问答和检索，流式输出
 
 ## 技术栈
 
@@ -18,6 +19,7 @@
 - jieba - 中文分词
 - SQLite - 倒排索引存储
 - OpenAI 兼容 API - 问答生成（DeepSeek、通义千问等）
+- FastAPI + Uvicorn - Web 服务
 
 ## 快速开始
 
@@ -39,6 +41,9 @@ qa query "什么是 RAG？"
 
 # 交互式对话
 qa chat
+
+# 启动 Web 服务
+qa web
 ```
 
 ## CLI 命令
@@ -48,6 +53,8 @@ qa chat
 | `qa index` | 扫描笔记目录，构建向量索引和全文索引 |
 | `qa query "问题"` | 单次问答 |
 | `qa chat` | 交互式对话模式 |
+| `qa search "关键词"` | 仅检索，不调用大模型，返回原始结果 |
+| `qa web` | 启动 Web 服务（默认 `127.0.0.1:8000`） |
 | `qa config-show` | 查看当前配置 |
 
 ## 项目结构
@@ -66,7 +73,10 @@ notes-knowledge-qa/
 │   ├── keyword_index.py    # 全文检索
 │   ├── retriever.py        # 混合检索器
 │   ├── qa.py               # 问答生成
-│   └── cli.py              # CLI 入口
+│   ├── web.py              # Web 服务 (FastAPI)
+│   ├── cli.py              # CLI 入口
+│   └── static/
+│       └── index.html      # Web 前端页面
 └── tests/
 ```
 
@@ -79,6 +89,7 @@ notes-knowledge-qa/
 - [x] Phase 5: 混合检索与问答生成
 - [x] Phase 6: CLI 交互
 - [x] Phase 7: 测试与优化
+- [x] Phase 8: Web 界面
 
 ## License
 
