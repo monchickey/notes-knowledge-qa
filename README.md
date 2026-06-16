@@ -55,6 +55,7 @@ qa web
 | `qa query "问题"` | 单次问答 |
 | `qa chat` | 交互式对话模式 |
 | `qa search "关键词"` | 仅检索，不调用大模型，返回原始结果 |
+| `qa agent "问题"` | 纯 Agent 检索，无需预构建索引 |
 | `qa web` | 启动 Web 服务（默认 `127.0.0.1:8000`） |
 | `qa config-show` | 查看当前配置 |
 
@@ -74,6 +75,7 @@ notes-knowledge-qa/
 │   ├── keyword_index.py    # 全文检索
 │   ├── retriever.py        # 混合检索器
 │   ├── qa.py               # 问答生成
+│   ├── agent_search.py     # 纯 Agent 检索引擎
 │   ├── history.py          # 对话历史管理 (SQLite)
 │   ├── web.py              # Web 服务 (FastAPI)
 │   ├── cli.py              # CLI 入口
@@ -93,6 +95,7 @@ notes-knowledge-qa/
 - [x] Phase 7: 测试与优化
 - [x] Phase 8: Web 界面
 - [x] Phase 9: 对话历史记录
+- [x] Phase 10: 纯 Agent 检索模式
 
 ## License
 

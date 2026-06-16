@@ -287,3 +287,44 @@ def config_show(ctx):
     table.add_row("索引目录", cfg.get("index_dir", ""))
 
     console.print(table)
+
+
+@main.command()
+@click.argument("question")
+@click.option("--max-rounds", "-r", default=10, type=int, help="最大工具调用轮数")
+@click.option("--max-files", "-f", default=20, type=int, help="最多读取的文件数")
+@click.pass_context
+def agent(ctx, question, max_rounds, max_files):
+    """纯 Agent 检索，无需预构建索引。"""
+    from notes_qa.agent_search import AgentSearchEngine
+
+    cfg = ctx.obj["config"]
+    notes_dir = cfg["notes_dir"]
+
+    console.print(f"\n[bold]问题：[/bold]{question}\n")
+    console.print(f"[dim]模式：纯 Agent 检索（最多 {max_rounds} 轮，最多读取 {max_files} 个文件）[/dim]\n")
+
+    engine = AgentSearchEngine(
+        notes_dir=notes_dir,
+        llm_config=cfg["llm"],
+        max_rounds=max_rounds,
+        max_files=max_files,
+        verbose=True
+    )
+
+    result = engine.search(question)
+
+    # 显示最终答案
+    console.print("\n[bold green]回答：[/bold green]")
+    console.print(result["answer"])
+
+    # 显示参考来源
+    if result["sources"]:
+        console.print("\n[bold]参考来源：[/bold]")
+        for source in result["sources"]:
+            console.print(f"  - [cyan]{source}[/cyan]")
+
+    # 显示统计信息
+    console.print(f"\n[dim]统计：{result['rounds']} 轮，读取 {len(result['files_read'])} 个文件[/dim]")
+    if result["files_read"]:
+        console.print(f"[dim]已读取：{', '.join(result['files_read'])}[/dim]")
