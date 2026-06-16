@@ -10,6 +10,7 @@
 - **本地嵌入**：向量嵌入使用本地 BGE 模型（sentence-transformers），CPU 即可运行，无需 API 调用
 - **兼容性强**：问答生成支持所有 OpenAI 兼容格式的 API（DeepSeek、通义千问等）
 - **Web 界面**：内置 FastAPI Web 服务，支持浏览器端对话问答和检索，流式输出
+- **历史记录**：Web 端对话历史自动保存到 SQLite，支持查看、搜索、删除历史记录
 
 ## 技术栈
 
@@ -73,6 +74,7 @@ notes-knowledge-qa/
 │   ├── keyword_index.py    # 全文检索
 │   ├── retriever.py        # 混合检索器
 │   ├── qa.py               # 问答生成
+│   ├── history.py          # 对话历史管理 (SQLite)
 │   ├── web.py              # Web 服务 (FastAPI)
 │   ├── cli.py              # CLI 入口
 │   └── static/
@@ -90,6 +92,7 @@ notes-knowledge-qa/
 - [x] Phase 6: CLI 交互
 - [x] Phase 7: 测试与优化
 - [x] Phase 8: Web 界面
+- [x] Phase 9: 对话历史记录
 
 ## License
 

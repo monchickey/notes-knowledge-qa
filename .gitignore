@@ -11,3 +11,4 @@ config.local.yaml
 .pytest_cache/
 models
 notes
+*.db
