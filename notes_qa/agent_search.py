@@ -104,7 +104,12 @@ TOOLS = [
 
 
 class AgentSearchEngine:
-    """纯 Agent 检索引擎，不依赖索引，通过工具调用让 LLM 自主检索"""
+    """纯 Agent 检索引擎，不依赖索引，通过工具调用让 LLM 自主检索。
+
+    支持两种 API 模式（通过 llm.api_type 配置）：
+    - chat_completions（默认）：使用 Chat Completions API
+    - responses：使用 Responses API
+    """
 
     def __init__(self, notes_dir: str, llm_config: dict,
                  max_rounds: int = 10, max_files: int = 20, verbose: bool = True):
@@ -120,6 +125,7 @@ class AgentSearchEngine:
         self.client = OpenAI(api_key=api_key, base_url=api_base)
         self.model = llm_config.get("model", "deepseek-chat")
         self.temperature = llm_config.get("temperature", 0.3)
+        self.api_type = llm_config.get("api_type", "chat_completions")
 
     def _log(self, message: str, level: str = "info"):
         """输出日志"""
@@ -244,6 +250,122 @@ class AgentSearchEngine:
         else:
             return f"错误：未知工具 {tool_name}"
 
+    # ---- Responses API 支持 ----
+
+    @staticmethod
+    def _convert_tools_for_responses(tools: list) -> list:
+        """将 Chat Completions 格式的 tools 转换为 Responses API 格式。"""
+        return [
+            {
+                "type": "function",
+                "name": t["function"]["name"],
+                "description": t["function"]["description"],
+                "parameters": t["function"]["parameters"],
+            }
+            for t in tools
+        ]
+
+    @staticmethod
+    def _messages_to_responses_input(messages: list) -> list:
+        """将 Chat Completions 格式的 messages 转换为 Responses API 的 input 格式。"""
+        input_items = []
+        for msg in messages:
+            role = msg.get("role")
+            if role == "system":
+                input_items.append({"role": "developer", "content": msg["content"]})
+            elif role == "user":
+                input_items.append({"role": "user", "content": msg["content"]})
+            elif role == "assistant":
+                tool_calls = msg.get("tool_calls")
+                if tool_calls:
+                    for tc in tool_calls:
+                        func = tc["function"]
+                        input_items.append({
+                            "type": "function_call",
+                            "call_id": tc["id"],
+                            "name": func["name"],
+                            "arguments": func["arguments"],
+                        })
+                else:
+                    input_items.append({"role": "assistant", "content": msg.get("content", "") or ""})
+            elif role == "tool":
+                input_items.append({
+                    "type": "function_call_output",
+                    "call_id": msg["tool_call_id"],
+                    "output": msg["content"],
+                })
+        return input_items
+
+    def _call_llm(self, messages: list) -> tuple:
+        """调用 LLM，返回标准化的 (tool_calls, content)。
+
+        tool_calls: list of dict {id, name, arguments}，无工具调用时为 None
+        content: str，无内容时为 ""
+        """
+        if self.api_type == "responses":
+            return self._call_llm_responses(messages)
+        return self._call_llm_completions(messages)
+
+    def _call_llm_completions(self, messages: list) -> tuple:
+        """使用 Chat Completions API 调用 LLM。"""
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            tools=TOOLS,
+            temperature=self.temperature,
+        )
+        message = response.choices[0].message
+        if not message.tool_calls:
+            return None, message.content or ""
+        tool_calls = [
+            {"id": tc.id, "name": tc.function.name, "arguments": tc.function.arguments}
+            for tc in message.tool_calls
+        ]
+        return tool_calls, message.content or ""
+
+    def _call_llm_responses(self, messages: list) -> tuple:
+        """使用 Responses API 调用 LLM。"""
+        resp_tools = self._convert_tools_for_responses(TOOLS)
+        input_items = self._messages_to_responses_input(messages)
+        response = self.client.responses.create(
+            model=self.model,
+            input=input_items,
+            tools=resp_tools,
+            temperature=self.temperature,
+        )
+        tool_calls = []
+        content = None
+        for item in response.output:
+            if item.type == "function_call":
+                tool_calls.append({
+                    "id": item.call_id,
+                    "name": item.name,
+                    "arguments": item.arguments,
+                })
+            elif item.type == "message":
+                content = item.content[0].text if item.content else ""
+        if not tool_calls:
+            return None, content or ""
+        return tool_calls, content or ""
+
+    @staticmethod
+    def _append_tool_messages(messages: list, tool_calls: list, results: list[str]):
+        """将工具调用和执行结果追加到消息列表（Completions 格式）。"""
+        messages.append({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {"name": tc["name"], "arguments": tc["arguments"]},
+                }
+                for tc in tool_calls
+            ],
+        })
+        for tc, result in zip(tool_calls, results):
+            messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
+
     def search(self, question: str) -> dict:
         """
         执行 Agent 检索
@@ -272,12 +394,7 @@ class AgentSearchEngine:
 
             # 调用 LLM
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    tools=TOOLS,
-                    temperature=self.temperature
-                )
+                tool_calls, content = self._call_llm(messages)
             except Exception as e:
                 self._log(f"LLM 调用失败：{e}", "error")
                 return {
@@ -287,26 +404,25 @@ class AgentSearchEngine:
                     "files_read": self.files_read
                 }
 
-            message = response.choices[0].message
-
             # 如果没有工具调用，说明 LLM 直接返回了回答
-            if not message.tool_calls:
+            if not tool_calls:
                 self._log("LLM 直接返回了回答（未使用工具）", "answer")
                 print("-" * 60)
                 return {
-                    "answer": message.content or "无法生成回答",
+                    "answer": content or "无法生成回答",
                     "sources": [],
                     "rounds": round_num,
                     "files_read": self.files_read
                 }
 
             # 处理工具调用
-            messages.append(message)  # 添加 assistant 消息
+            executed_results = []
+            finish_result = None
 
-            for tool_call in message.tool_calls:
-                tool_name = tool_call.function.name
+            for tc in tool_calls:
+                tool_name = tc["name"]
                 try:
-                    arguments = json.loads(tool_call.function.arguments)
+                    arguments = json.loads(tc["arguments"])
                 except json.JSONDecodeError:
                     arguments = {}
 
@@ -319,12 +435,13 @@ class AgentSearchEngine:
                     sources = arguments.get("sources", [])
                     self._log(f"检索完成，共 {round_num} 轮，读取 {len(self.files_read)} 个文件", "answer")
                     print("-" * 60)
-                    return {
+                    finish_result = {
                         "answer": answer,
                         "sources": sources,
                         "rounds": round_num,
                         "files_read": self.files_read
                     }
+                    break
 
                 # 执行工具
                 result = self._execute_tool(tool_name, arguments)
@@ -334,13 +451,13 @@ class AgentSearchEngine:
                     result = result[:3000] + "\n... (内容已截断)"
 
                 self._log(f"结果：{result[:200]}{'...' if len(result) > 200 else ''}", "result")
+                executed_results.append(result)
 
-                # 添加工具结果到消息
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result
-                })
+            if finish_result is not None:
+                return finish_result
+
+            # 将工具调用和结果追加到消息
+            self._append_tool_messages(messages, tool_calls, executed_results)
 
         # 达到最大轮数
         self._log(f"达到最大轮数（{self.max_rounds}），强制结束", "warning")
@@ -353,19 +470,13 @@ class AgentSearchEngine:
         })
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                tools=TOOLS,
-                temperature=self.temperature
-            )
-            message = response.choices[0].message
+            tool_calls, content = self._call_llm(messages)
 
-            if message.tool_calls:
-                for tool_call in message.tool_calls:
-                    if tool_call.function.name == "finish":
+            if tool_calls:
+                for tc in tool_calls:
+                    if tc["name"] == "finish":
                         try:
-                            arguments = json.loads(tool_call.function.arguments)
+                            arguments = json.loads(tc["arguments"])
                         except json.JSONDecodeError:
                             arguments = {}
                         return {
@@ -376,7 +487,7 @@ class AgentSearchEngine:
                         }
 
             return {
-                "answer": message.content or "达到最大轮数，无法生成回答",
+                "answer": content or "达到最大轮数，无法生成回答",
                 "sources": [],
                 "rounds": self.max_rounds,
                 "files_read": self.files_read

@@ -46,6 +46,8 @@ llm:
   temperature: 0.3
   # 最大 token 数
   max_tokens: 2048
+  # API 类型：chat_completions（默认）或 responses（Responses API，更适合多轮对话）
+  api_type: chat_completions
 
 # 索引数据存储目录
 index_dir: ./index_data

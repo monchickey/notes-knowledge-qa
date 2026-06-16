@@ -27,11 +27,17 @@ def _build_context(results: list[dict]) -> str:
 
 
 class QAEngine:
-    """问答引擎：检索 + LLM 生成。"""
+    """问答引擎：检索 + LLM 生成。
+
+    支持两种 API 模式（通过 llm.api_type 配置）：
+    - chat_completions（默认）：使用 Chat Completions API
+    - responses：使用 Responses API，更适合多轮对话场景
+    """
 
     def __init__(self, retriever: Retriever, llm_config: dict):
         self.retriever = retriever
         self.llm_config = llm_config
+        self.api_type = llm_config.get("api_type", "chat_completions")
         self.client = OpenAI(
             api_key=llm_config.get("api_key", ""),
             base_url=llm_config.get("api_base", "https://api.deepseek.com/v1"),
@@ -44,6 +50,12 @@ class QAEngine:
 
         user_message = f"笔记内容：\n{context}\n\n问题：{question}"
 
+        if self.api_type == "responses":
+            return self._query_responses(user_message, stream)
+        return self._query_completions(user_message, stream)
+
+    def _query_completions(self, user_message: str, stream: bool) -> str | Iterator[str]:
+        """使用 Chat Completions API 生成回答。"""
         kwargs = {
             "model": self.llm_config.get("model", "deepseek-chat"),
             "messages": [
@@ -58,16 +70,39 @@ class QAEngine:
         response = self.client.chat.completions.create(**kwargs)
 
         if stream:
-            return self._stream_response(response)
+            return self._stream_completions(response)
 
         answer = response.choices[0].message.content
         return answer
 
-    def _stream_response(self, response):
-        """流式输出回答。"""
+    def _query_responses(self, user_message: str, stream: bool) -> str | Iterator[str]:
+        """使用 Responses API 生成回答。"""
+        kwargs = {
+            "model": self.llm_config.get("model", "deepseek-chat"),
+            "instructions": _SYSTEM_PROMPT,
+            "input": user_message,
+            "temperature": self.llm_config.get("temperature", 0.3),
+            "max_output_tokens": self.llm_config.get("max_tokens", 2048),
+        }
+
+        if stream:
+            response = self.client.responses.create(**kwargs, stream=True)
+            return self._stream_responses(response)
+
+        response = self.client.responses.create(**kwargs)
+        return response.output_text
+
+    def _stream_completions(self, response):
+        """Chat Completions API 流式输出。"""
         for chunk in response:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+
+    def _stream_responses(self, response):
+        """Responses API 流式输出。"""
+        for event in response:
+            if event.type == "response.output_text.delta":
+                yield event.delta
 
     def get_sources(self, question: str) -> list[dict]:
         """仅获取检索结果，不调用 LLM。"""
